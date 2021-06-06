@@ -19,7 +19,32 @@ pub mod simple {
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
         token::mint_to(cpi_ctx, 50)?;
         Ok(())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
     }
+
+
+
+
+
+
+
+
+
 }
 
 #[derive(Accounts)]

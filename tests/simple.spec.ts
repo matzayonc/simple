@@ -1,8 +1,9 @@
 import * as anchor from '@project-serum/anchor'
-import { Program } from '@project-serum/anchor'
+import { Program, BN } from '@project-serum/anchor'
 import { TokenInstructions } from '@project-serum/serum'
-import { PublicKey, Keypair, Connection } from '@solana/web3.js'
+import { PublicKey, Keypair, Connection, Transaction } from '@solana/web3.js'
 import { Token, u64 } from '@solana/spl-token'
+import { assert } from 'console'
 
 
 const SEED = Buffer.from('Synthetify')
@@ -16,7 +17,6 @@ const wallet = (provider.wallet as unknown as { payer: Keypair }).payer
 
 let programAuthority: PublicKey
 export let someToken: Token
-let staking: PublicKey
 
 
 before(async () =>{
@@ -52,17 +52,17 @@ async function createToken(connection: Connection, payer: Keypair, mintAuthority
 
 
 
+let owner = Keypair.generate()
+let staking: PublicKey
+let tokens: PublicKey
 
 
-
-describe('simple', () => {
+describe('Simple', () => {
 
   it('Mint', async () => {
 
-    let owner = Keypair.generate()
-
-    let staking = await someToken.createAccount(programAuthority)
-    let tokens = await someToken.createAccount(owner.publicKey)
+    staking = await someToken.createAccount(programAuthority)
+    tokens = await someToken.createAccount(owner.publicKey)
 
     await mainProgram.rpc.mintTokens(nonce, {
       accounts: {
@@ -76,8 +76,45 @@ describe('simple', () => {
     })
 
     const { amount } = await someToken.getAccountInfo(tokens)
-    console.log(amount)
-    
+    // assert.ok(amount.eq(new u64(50)))
+  })
+
+  it('transfer', async () => {
+    const approveIx = await Token.createApproveInstruction(
+      TOKEN_PROGRAM,
+      tokens,
+      programAuthority,
+      owner.publicKey,
+      [],
+      new u64(42)
+    )
+
+    const depositIx = await mainProgram.instruction.deposit(to64(42), {
+      accounts: {
+          owner: owner.publicKey,
+          exchangeAccount: staking,
+          collateralAccount: tokens,
+          userCollateralAccount: owner.publicKey,
+          tokenProgram: TOKEN_PROGRAM,
+          exchangeAuthority: programAuthority
+      }
+  })
+
+
+
+
+
 
   })
+
 });
+
+
+async function depositInstruction( amount, exchangeAccount, userCollateralAccount, owner ) {
+  return 
+}
+
+
+function to64(amount) {
+  return new u64(amount.toString())
+}
