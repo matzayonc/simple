@@ -4,7 +4,6 @@ import { TokenInstructions } from '@project-serum/serum'
 import {
   PublicKey,
   Keypair,
-  Connection,
   Transaction,
   sendAndConfirmRawTransaction
 } from '@solana/web3.js'
@@ -32,7 +31,14 @@ before(async () => {
   programAuthority = _programAuthority
   nonce = _nonce
 
-  someToken = await createToken(connection, wallet, programAuthority)
+  someToken = await Token.createMint(
+    connection,
+    wallet,
+    programAuthority,
+    null,
+    4,
+    TokenInstructions.TOKEN_PROGRAM_ID
+  )
 })
 
 let owner = Keypair.generate()
@@ -44,6 +50,7 @@ describe('Simple', () => {
     //creating accounts
     staking = await someToken.createAccount(programAuthority)
     tokens = await someToken.createAccount(owner.publicKey)
+
     //minting tokens
     await mainProgram.rpc.mintTokens(nonce, {
       accounts: {
@@ -58,13 +65,22 @@ describe('Simple', () => {
     })
 
     //checking balance
-    assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(to64(50)))
+    assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(tou64(50)))
   })
 
   it('Deposit', async () => {
-    const amountToSend = to64(42)
+    const amountToSend = tou64(42)
+
     //creating instructions
-    const depositIx = await depositInstruction(amountToSend, staking, tokens, owner.publicKey)
+	const depositIx = await mainProgram.instruction.deposit(amountToSend, nonce, {
+		accounts: {
+		owner: owner.publicKey,
+		collateralAccount: staking,
+		userCollateralAccount: tokens,
+		tokenProgram: TOKEN_PROGRAM_ID,
+		exchangeAuthority: programAuthority
+		}
+	})
 
     const approveIx = Token.createApproveInstruction(
       someToken.programId,
@@ -79,12 +95,12 @@ describe('Simple', () => {
     await signAndSend(new Transaction().add(approveIx).add(depositIx), [wallet, owner], connection)
 
     //checking balances
-    assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(to64(8)))
-    assert.ok((await someToken.getAccountInfo(staking)).amount.eq(to64(42)))
+    assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(tou64(8)))
+    assert.ok((await someToken.getAccountInfo(staking)).amount.eq(tou64(42)))
   })
 })
 
-function to64(amount) {
+function tou64(amount) {
   return new u64(amount.toString())
 }
 
@@ -96,33 +112,4 @@ async function signAndSend(tx, signers, connection) {
   tx.partialSign(...signers)
   const rawTx = tx.serialize()
   return await sendAndConfirmRawTransaction(connection, rawTx, Provider.defaultOptions())
-}
-
-async function depositInstruction(
-  amount: BN,
-  collateralAccount: PublicKey,
-  userCollateralAccount: PublicKey,
-  owner: PublicKey
-) {
-  return await mainProgram.instruction.deposit(amount, nonce, {
-    accounts: {
-      owner: owner,
-      collateralAccount: collateralAccount,
-      userCollateralAccount: userCollateralAccount,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      exchangeAuthority: programAuthority
-    }
-  })
-}
-
-async function createToken(connection: Connection, payer: Keypair, mintAuthority: PublicKey) {
-  const token = await Token.createMint(
-    connection,
-    payer,
-    mintAuthority,
-    null,
-    4,
-    TokenInstructions.TOKEN_PROGRAM_ID
-  )
-  return token
 }
