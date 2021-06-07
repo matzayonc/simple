@@ -76,7 +76,7 @@ describe('Simple', () => {
 		accounts: {
 		owner: owner.publicKey,
 		collateralAccount: staking,
-		userCollateralAccount: tokens,
+		sender: tokens,
 		tokenProgram: TOKEN_PROGRAM_ID,
 		exchangeAuthority: programAuthority
 		}
