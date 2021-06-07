@@ -25,9 +25,18 @@ pub mod simple {
 
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64, nonce: u8) -> Result<()> {
-        msg!("DEPOSIT");
+        msg!("Syntetify: DEPOSIT");
 
+        //let exchange_collateral_balance = ctx.accounts.collateral_account.amount;
+        let user_collateral_account = &mut ctx.accounts.user_collateral_account;
 
+        let tx_signer = ctx.accounts.owner.key;
+        // Signer need to be owner of source account
+        if !tx_signer.eq(&user_collateral_account.owner) {
+            return Err(ErrorCode::InvalidSigner.into());
+        }
+
+        // Transfer token
         let seeds = &[SEED.as_bytes(), &[nonce]];
         let signer = &[&seeds[..]];
         let cpi_ctx = CpiContext::from(&*ctx.accounts).with_signer(signer);
@@ -36,18 +45,6 @@ pub mod simple {
         Ok(())
     }
 
-}
-
-impl<'a, 'b, 'c, 'info> From<&Deposit<'info>> for CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
-    fn from(accounts: &Deposit<'info>) -> CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
-        let cpi_accounts = Transfer {
-            from: accounts.user_collateral_account.to_account_info(),
-            to: accounts.collateral_account.to_account_info(),
-            authority: accounts.exchange_authority.to_account_info(),
-        };
-        let cpi_program = accounts.token_program.to_account_info();
-        CpiContext::new(cpi_program, cpi_accounts)
-    }
 }
 
 
@@ -64,6 +61,18 @@ pub struct Deposit<'info> {
     pub owner: AccountInfo<'info>,
     pub exchange_authority: AccountInfo<'info>,
 }
+impl<'a, 'b, 'c, 'info> From<&Deposit<'info>> for CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
+    fn from(accounts: &Deposit<'info>) -> CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: accounts.user_collateral_account.to_account_info(),
+            to: accounts.collateral_account.to_account_info(),
+            authority: accounts.exchange_authority.to_account_info(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
 
 #[derive(Accounts)]
 pub struct MintTokens<'info> {

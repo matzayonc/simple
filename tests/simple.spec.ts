@@ -9,11 +9,10 @@ import {
 	sendAndConfirmRawTransaction,
 	Account,
 } from "@solana/web3.js"
-import { Token, u64 } from "@solana/spl-token"
-import { assert } from "console"
+import { Token, u64, TOKEN_PROGRAM_ID } from "@solana/spl-token"
+import { assert } from "chai"
 
 const SEED = Buffer.from("Synthetify")
-const TOKEN_PROGRAM = TokenInstructions.TOKEN_PROGRAM_ID
 export const mainProgram = anchor.workspace.Simple as Program
 let nonce: number
 
@@ -36,8 +35,6 @@ before(async () => {
 	nonce = _nonce
 
 	someToken = await createToken(connection, wallet, programAuthority)
-
-	staking = await someToken.createAccount(programAuthority)
 })
 
 async function createToken(
@@ -62,6 +59,7 @@ let tokens: PublicKey
 
 describe("Simple", () => {
 	it("Mint", async () => {
+		//creating accounts
 		staking = await someToken.createAccount(programAuthority)
 		tokens = await someToken.createAccount(owner.publicKey)
 
@@ -71,69 +69,84 @@ describe("Simple", () => {
 				auth: programAuthority,
 				owner: owner.publicKey,
 				tokens,
-				tokenProgram: TOKEN_PROGRAM,
+				tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
 				rent: anchor.web3.SYSVAR_RENT_PUBKEY,
 			},
 			signers: [owner],
 		})
 
-		const { amount } = await someToken.getAccountInfo(tokens)
-		console.log(amount)
-		// assert.ok(amount.eq(new u64(50)))
-	})
+		assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(to64(50)))
 
-	it("transfer", async () => {
-		const approveIx = await Token.createApproveInstruction(
-			TOKEN_PROGRAM,
+		const amountToSend = to64(42)
+
+		const depositIx = await depositInstruction({
+			amount: amountToSend,
+			collateralAccount: staking,
+			userCollateralAccount: tokens,
+			owner: owner.publicKey,
+		})
+
+		const approveIx = Token.createApproveInstruction(
+			someToken.programId,
 			tokens,
 			programAuthority,
 			owner.publicKey,
 			[],
-			new u64(42)
+			amountToSend
 		)
 
-		const depositIx = await mainProgram.instruction.deposit(
-			to64(42),
-			nonce,
-			{
-				accounts: {
-					owner: owner.publicKey,
-					collateralAccount: staking,
-					userCollateralAccount: owner.publicKey,
-					tokenProgram: TOKEN_PROGRAM,
-					exchangeAuthority: programAuthority,
-				},
-			}
-		)
-/*
 		await signAndSend(
 			new Transaction().add(approveIx).add(depositIx),
-			[owner],
-			connection,
-			null
+			[wallet, owner],
+			connection
 		)
-    */
+
+		assert.ok((await someToken.getAccountInfo(tokens)).amount.eq(to64(8)))
+		assert.ok((await someToken.getAccountInfo(staking)).amount.eq(to64(42)))
 	})
 })
-
-
 
 function to64(amount) {
 	return new u64(amount.toString())
 }
 
-async function signAndSend(tx, signers, connection, opts) {
+async function signAndSend(tx, signers, connection, opts?) {
 	tx.setSigners(...signers.map(s => s.publicKey))
 	const blockhash = await connection.getRecentBlockhash(
 		(opts === null || opts === void 0 ? void 0 : opts.commitment) ||
 			Provider.defaultOptions().commitment
 	)
+
 	tx.recentBlockhash = blockhash.blockhash
 	tx.partialSign(...signers)
 	const rawTx = tx.serialize()
 	return await sendAndConfirmRawTransaction(
 		connection,
 		rawTx,
-		opts || Provider.defaultOptions()
+		Provider.defaultOptions()
 	)
+}
+
+export interface DepositInstruction {
+	collateralAccount: PublicKey
+	userCollateralAccount: PublicKey
+	owner: PublicKey
+	amount: BN
+}
+
+async function depositInstruction({
+	amount,
+	collateralAccount,
+	userCollateralAccount,
+	owner,
+}: DepositInstruction) {
+	return await mainProgram.instruction.deposit(amount, nonce, {
+		accounts: {
+			owner: owner,
+			collateralAccount: collateralAccount,
+			userCollateralAccount: userCollateralAccount,
+			tokenProgram: TOKEN_PROGRAM_ID,
+			exchangeAuthority: programAuthority,
+		},
+	})
 }
